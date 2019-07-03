@@ -22,6 +22,7 @@ import yaml
 import fcntl
 from pathlib import Path
 from uuid import uuid4
+import random
 try:
     import psutil
 except Exception:
@@ -877,7 +878,7 @@ class BaseTask(object):
                 settings.AWX_PROOT_SHOW_PATHS
 
             pi_path = settings.AWX_PROOT_BASE_PATH
-            if not self.instance.is_isolated():
+            if not self.instance.is_isolated() and not self.instance.is_containerized:
                 pi_path = tempfile.mkdtemp(
                     prefix='ansible_runner_pi_',
                     dir=settings.AWX_PROOT_BASE_PATH
@@ -1160,6 +1161,7 @@ class BaseTask(object):
 
         try:
             isolated = self.instance.is_isolated()
+            containerized = self.instance.is_containerized
             self.instance.send_notification_templates("running")
             private_data_dir = self.build_private_data_dir(self.instance)
             self.pre_run_hook(self.instance, private_data_dir)
@@ -1253,7 +1255,7 @@ class BaseTask(object):
                 if not params[v]:
                     del params[v]
 
-            if self.instance.is_isolated() is True:
+            if self.instance.is_isolated() or containerized:
                 module_args = None
                 if 'module_args' in params:
                     # if it's adhoc, copy the module args
@@ -1264,6 +1266,13 @@ class BaseTask(object):
                     params.pop('inventory'),
                     os.path.join(private_data_dir, 'inventory')
                 )
+                if containerized:
+                    from awx.main.scheduler.kubernetes import PodManager # Avoid circular import
+                    params['envvars'].pop('HOME')
+                    pod_manager = PodManager(self.instance)
+                    pod_manager.deploy()
+                    self.instance.execution_node = pod_manager.pod_name
+
                 ansible_runner.utils.dump_artifacts(params)
                 isolated_manager_instance = isolated_manager.IsolatedManager(
                     cancelled_callback=lambda: self.update_model(self.instance.pk).cancel_flag,
@@ -1592,6 +1601,8 @@ class RunJob(BaseTask):
         '''
         Return whether this task should use proot.
         '''
+        if job.is_containerized:
+            return False # TODO: Get smarter
         return getattr(settings, 'AWX_PROOT_ENABLED', False)
 
     def pre_run_hook(self, job, private_data_dir):
@@ -1652,6 +1663,11 @@ class RunJob(BaseTask):
             if job.is_isolated() is True:
                 pu_ig = pu_ig.controller
                 pu_en = settings.CLUSTER_HOST_ID
+
+            if job.instance_group.is_containerized is True:
+                pu_ig = random.choice(job.global_instance_groups)
+                pu_en = settings.CLUSTER_HOST_ID
+
             sync_metafields = dict(
                 launch_type="sync",
                 job_type='run',
@@ -1730,8 +1746,13 @@ class RunJob(BaseTask):
                 os.path.join(private_data_dir, 'artifacts', str(job.id), 'fact_cache'),
                 fact_modification_times,
             )
-        if isolated_manager_instance:
+        if isolated_manager_instance and not job.is_containerized:
             isolated_manager_instance.cleanup()
+
+        if job.is_containerized:
+            from awx.main.scheduler.kubernetes import PodManager # prevent circular import
+            PodManager(job).delete()
+
         try:
             inventory = job.inventory
         except Inventory.DoesNotExist:
