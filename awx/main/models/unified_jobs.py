@@ -706,7 +706,7 @@ class UnifiedJob(PolymorphicModel, PasswordFieldsModel, CommonModelNameNotUnique
     def supports_isolation(cls):
         return False
 
-    @classmethod
+    @property
     def can_run_containerized(cls):
         return False
 

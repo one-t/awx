@@ -1266,10 +1266,12 @@ class BaseTask(object):
                     params.pop('inventory'),
                     os.path.join(private_data_dir, 'inventory')
                 )
+                pod_manager = None
                 if containerized:
                     from awx.main.scheduler.kubernetes import PodManager # Avoid circular import
                     params['envvars'].pop('HOME')
                     pod_manager = PodManager(self.instance)
+                    self.cleanup_paths.append(pod_manager.kube_config)
                     pod_manager.deploy()
                     self.instance.execution_node = pod_manager.pod_name
 
@@ -1277,6 +1279,7 @@ class BaseTask(object):
                 isolated_manager_instance = isolated_manager.IsolatedManager(
                     cancelled_callback=lambda: self.update_model(self.instance.pk).cancel_flag,
                     check_callback=self.check_handler,
+                    pod_manager=pod_manager
                 )
                 status, rc = isolated_manager_instance.run(self.instance,
                                                            private_data_dir,
