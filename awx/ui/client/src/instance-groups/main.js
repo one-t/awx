@@ -27,7 +27,7 @@ import service from './instance-groups.service';
 
 import InstanceGroupsStrings from './instance-groups.strings';
 
-import instanceGroupJobsRoute from '~features/jobs/routes/instanceGroupJobs.route.js';
+import {instanceGroupJobsRoute, containerGroupJobsRoute} from '~features/jobs/routes/instanceGroupJobs.route.js';
 import instanceJobsRoute from '~features/jobs/routes/instanceJobs.route.js';
 
 
@@ -247,12 +247,9 @@ function InstanceGroupsRun($stateExtender, strings) {
         }
     });
 
-
-
-
     $stateExtender.addState({
         name: 'instanceGroups.editContainerGroup',
-        url: '/container_group/edit/:instance_group_id',
+        url: '/container_group/:instance_group_id',
         views: {
             'editContainerGroup@instanceGroups': {
                 templateUrl: AddContainerGroup,
@@ -326,10 +323,6 @@ function InstanceGroupsRun($stateExtender, strings) {
         }
     });
 
-
-
-
-
     $stateExtender.addState({
         name: 'instanceGroups.edit',
         route: '/:instance_group_id',
@@ -397,7 +390,7 @@ function InstanceGroupsRun($stateExtender, strings) {
                     let path = `${GetBasePath('instance_groups')}${$stateParams.instance_group_id}/instances`;
                     return qs.search(path, $stateParams[`instance_search`]);
                 }
-            ]
+            ],
         }
     });
 
@@ -445,12 +438,16 @@ function InstanceGroupsRun($stateExtender, strings) {
                     let path = `${GetBasePath('instances')}`;
                     return qs.search(path, $stateParams[`add_instance_search`]);
                 }
-            ]
+            ],
+            routeData: [function () {
+                return "instanceGroups.instances";
+            }]
         }
     });
 
     $stateExtender.addState(instanceJobsRoute);
     $stateExtender.addState(instanceGroupJobsRoute);
+    $stateExtender.addState(containerGroupJobsRoute);
 }
 
 InstanceGroupsRun.$inject = [
